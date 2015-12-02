@@ -17,17 +17,16 @@ Metthod: POST
 
 {
 	"eventId": "92242570-5e82-11e5-a2ff-852f495d7e91",
-	"eventName": "ACQUIRED",
-	"tenantId": "default",
-	"createdBy": "test",
+	"eventName": "ASSIGNED",
+	"tenantId": "GSA",
+	"createdBy": "shibu",
 	"moduleId": "4b9c21e0-5e7b-11e5-ae4d-852f495d7e91",
 	"moduleTypeOfTask": "test type",
 	"moduleType": "acquisition",
 	"moduleTaskDescription": "aaa desc 233435",
-	"assigneeId": "sd",
-	"assignedById": "manger",
+	"assigneeId": "sridhar",
+	"assignedById": "shibu",
 	"eventType": "ASSIGN"
 
 }
-
 

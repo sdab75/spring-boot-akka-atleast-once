@@ -43,12 +43,10 @@ public class AbcEventStoreActor extends PersistentActor {
 
     @Override
     protected void publishDoneEvent(EDFEvent edfEvent) {
-/*
         if(edfEvent.getEventName().equals(EDFEvent.APPSTATUS.ACQUIRED.name())){
             System.out.println("Publishing ACQUIRED event");
             edfEvent.setEventName(EDFEvent.STATUS.INPROGRESS.name());
             eventDispatcher.dispatchToDef(edfEvent);
         }
-*/
     }
 }
