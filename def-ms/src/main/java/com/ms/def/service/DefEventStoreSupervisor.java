@@ -38,25 +38,25 @@ public class DefEventStoreSupervisor extends UntypedActor {
     }
 
     private void initActor() {
-        log.info("AbcEvent Store Supervisor Starting up");
+        System.out.println("AbcEvent Store Supervisor Starting up");
         eventStoreRef = getContext().actorOf(defEventStoreActorProps, "defEventStoreActor");
     }
 
     @Override
     public SupervisorStrategy supervisorStrategy() {
-        log.info("WorkerSupervisor: supervisorStrategy invoked #################################################");
+        System.out.println("WorkerSupervisor: supervisorStrategy invoked #################################################");
         return restartOrEsclate;
     }
 
     static final Object Reconnect = "Reconnect";
 
     public void onReceive(Object msg) {
-        log.info("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%v " + msg.toString());
+        System.out.println("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%v " + msg.toString());
         if (msg instanceof AssignmentEvent) {
-            log.info("Worker Supervisor: Got and forwarding to the persistent actor worker: ", ((AssignmentEvent) msg).getEventName());
+            System.out.println("Worker Supervisor: Got and forwarding to the persistent actor worker: "+((AssignmentEvent) msg).getEventName());
             eventStoreRef.forward(msg, getContext());
         } else if (msg instanceof DistributedPubSubMediator.SubscribeAck) {
-            log.info("ListenerSupervisor subscribing");
+            System.out.println("ListenerSupervisor subscribing");
         } else if (msg == ReceiveTimeout.getInstance()) {
             getContext().parent().tell(new ShardRegion.Passivate(PoisonPill.getInstance()), getSelf());
             // No progress within 15 seconds, ServiceUnavailable

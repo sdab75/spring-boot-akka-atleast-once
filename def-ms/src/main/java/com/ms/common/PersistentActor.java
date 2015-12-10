@@ -7,10 +7,13 @@ import akka.cluster.sharding.ShardRegion;
 import akka.japi.Procedure;
 import akka.persistence.UntypedPersistentActor;
 import com.ms.event.EDFEvent;
+import com.ms.event.EDFEventDeliveryAck;
+import com.ms.event.IgnoreErroedEvent;
 import com.ms.event.StoredEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
 
 /**
  * Created by davenkat on 9/28/2015.
@@ -21,35 +24,34 @@ public abstract class PersistentActor extends UntypedPersistentActor {
 
     @Override
     public void preStart() throws Exception {
-        System.out.println("PersistentActor Startup ###########################");
+        System.out.println(getCmdProcessorName() + " Starting ......");
         super.preStart();
     }
 
     @Override
+    public String persistenceId() {
+        return getCmdProcessorName()+"-" + getContext().parent().path().name();
+    }
+
+
+    @Override
     public boolean recoveryFinished() {
-        LOG.info(" PersistentActor Recovery Finished !!!");
+        System.out.println(getCmdProcessorName() + " Recovery Finished !!!");
         return super.recoveryFinished();
     }
 
     @Override
     public void onRecoveryFailure(Throwable cause, scala.Option<Object> event) {
-        LOG.error(" PersistentActor Recovery Failed !!!");
+        LOG.error(getCmdProcessorName() + " Recovery Failed !!!");
         super.onRecoveryFailure(cause, event);
-    }
-
-
-    @Override
-    public void onPersistFailure(Throwable cause, Object event, long seqNr) {
-        LOG.info(" Persistenced failed and the actor will be stopped!!!");
-        super.onPersistFailure(cause, event, seqNr);
     }
 
     @Override
     public void onReceiveRecover(Object msg) {
         if (msg instanceof StoredEvent) {
-            StoredEvent storedEvent = (StoredEvent) msg;
-            LOG.info(" Recovered Event -->" + storedEvent.getEDFEvent().toString());
-            processRecoveredEvent(storedEvent);
+            StoredEvent storedEvent=(StoredEvent) msg;
+            System.out.println(getCmdProcessorName() + " Recovered Event -->" + storedEvent.getEDFEvent().toString());
+            processStoredEvent(storedEvent);
         } else {
             unhandled(msg);
         }
@@ -57,53 +59,81 @@ public abstract class PersistentActor extends UntypedPersistentActor {
 
     @Override
     public void onReceiveCommand(Object cmd) {
-        processCommand(cmd);
-    }
+        try {
+            //Arming the security
+            processCommand(cmd);
+        } finally {
+        }
 
-    /**
-     * Process the recovered Event.
-     *
-     * @param storedEvent
-     */
-    protected void processRecoveredEvent(StoredEvent storedEvent) {
-        processEvent(storedEvent.getEDFEvent());
     }
 
     /**
      * Common orchestration for a persistent actor.
-     *
      * @param cmd
      */
-    protected void processCommand(Object cmd) {
-        if (cmd instanceof EDFEvent) {
+    protected void processCommand(Object cmd){
+        if (cmd instanceof IgnoreErroedEvent) {
+            //This is a persisted event and failed for some reason. The supervisor determines received error can't be processed further and can't retry anymore.
+            //To achieve this
+            saveSnapshot(((IgnoreErroedEvent) cmd).getStoredEvent());
+        }else  if (cmd instanceof EDFEvent) {
             EDFEvent evt = ((EDFEvent) cmd);
-            if (validateEvent(evt)) {
-                StoredEvent storedEvent = new StoredEvent(evt);
-                persistAsync(storedEvent, new Procedure<StoredEvent>() {
+            System.out.println(getCmdProcessorName() + " Received command ...");
+            if(validateEvent(evt)){
+                StoredEvent storedEvent= new StoredEvent(evt);
+                persist(storedEvent, new Procedure<StoredEvent>() {
                     public void apply(StoredEvent storedEvent) throws Exception {
-
-                        LOG.info(" Validated EDFEvent stored successfully, processing the stored Event -->" + storedEvent.getEDFEvent().toString());
-                        processEvent(storedEvent.getEDFEvent());
-                        LOG.info(" EDF Event processing finished -->" + storedEvent.getEDFEvent().toString());
-
-                        //For any further event publishing
-                        publishDoneEvent(storedEvent.getEDFEvent());
-                        saveSnapshot(storedEvent);
+                        processStoredEvent(storedEvent);
                     }
                 });
+                getSender().tell(new EDFEventDeliveryAck(evt.getEventDeliveryId(), true), getSelf());
+            } else {
+                getSender().tell(new EDFEventDeliveryAck(evt.getEventDeliveryId(), false), getSelf());
             }
         } else if (cmd instanceof DistributedPubSubMediator.SubscribeAck) {
-            LOG.info("PersistentActor successfully subscribed for receiving event messages !!!!");
+            System.out.println(getCmdProcessorName() + " successfully subscribed for receiving event messages !!!!");
         } else if (cmd.equals(ReceiveTimeout.getInstance())) {
-            LOG.info("PersistentActor received idle time out kicked off and restart the Actor !!!!");
+            System.out.println(getCmdProcessorName() + " received idle time out kicked off and restart the Actor !!!!");
             getContext().parent().tell(new ShardRegion.Passivate(PoisonPill.getInstance()), getSelf());
         } else
             unhandled(cmd);
     }
 
+    /**
+     * Executes the stored Event
+     * @param storedEvent
+     */
+    private void processStoredEvent(StoredEvent storedEvent){
+        {
+            try {
+                //Arming the security
+                System.out.println(getCmdProcessorName() + " stored EDFEvent successfully, processing of the stored Event started ..");
+                try {
+                    preProcessEvent(storedEvent.getEDFEvent());
+                    processEvent(storedEvent.getEDFEvent());
+                    saveSnapshot(storedEvent);
+                    postProcessEvent(storedEvent.getEDFEvent());
+                }catch(Exception e){
+                    throw new WrapperException("Exception raised while persistent actor processing the event !!  ",storedEvent,e);
+                }
+                System.out.println(getCmdProcessorName() + " EDF Event processing finished ...");
+
+                //For any further event publishing
+                EDFEvent eventToPublish = publishDoneEvent(storedEvent.getEDFEvent());
+                if (eventToPublish != null) {
+                    //The child class determined to publish the done event.
+                    getContext().system().eventStream().publish(eventToPublish);
+                }
+
+            } finally {
+            }
+        }
+    }
+
+    abstract protected String getCmdProcessorName();
     abstract protected boolean validateEvent(EDFEvent edfEvent);
-
+    abstract protected void preProcessEvent(EDFEvent edfEvent);
     abstract protected void processEvent(EDFEvent edfEvent);
-
-    abstract protected void publishDoneEvent(EDFEvent edfEvent);
+    abstract protected void postProcessEvent(EDFEvent edfEvent);
+    abstract protected EDFEvent publishDoneEvent(EDFEvent edfEvent);
 }

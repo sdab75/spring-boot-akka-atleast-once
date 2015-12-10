@@ -157,33 +157,6 @@ public class AkkaConfig extends WebMvcConfigurerAdapter {
         return messageExtractor;
     }
 
-
-    @Bean
-    // Restart the child when ServiceUnavailable is thrown.
-    // After 3 restarts within 5 seconds it will escalate to the supervisor which may stop the process.
-    public SupervisorStrategy restartOrEsclate() {
-        SupervisorStrategy strategy = new OneForOneStrategy(-1,Duration.create("5 seconds"), new Function<Throwable, SupervisorStrategy.Directive>() {
-            @Override
-            public SupervisorStrategy.Directive apply(Throwable t) {
-                if (t instanceof NullPointerException) {
-                    System.out.println("oneToOne: restartOrEsclate strategy, restarting the actor");
-                    return restart();
-                }else if (t instanceof ServiceUnavailable) {
-                    System.out.println("oneToOne: restartOrEsclate strategy, escalate");
-                    return escalate();
-                }else if (t instanceof DataStoreException) {
-                    System.out.println("oneToOne: DataStoreException invoked, escalating to oneToAll @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
-//                    return restart();
-                    return stop();
-                }  else {
-                    System.out.println("oneToOne: final else called escalating to oneToAll");
-                    return escalate();
-                }
-            }
-        });
-        return strategy;
-    }
-
     /**
      * Read configuration from application.conf file
      */

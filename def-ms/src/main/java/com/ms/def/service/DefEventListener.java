@@ -7,6 +7,7 @@ import akka.cluster.pubsub.DistributedPubSubMediator;
 import akka.cluster.sharding.ShardRegion;
 import com.ms.event.AssignmentEvent;
 import com.ms.event.EDFEventDeliveryAck;
+import com.ms.event.IgnoreErroedEvent;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
@@ -27,6 +28,7 @@ public class DefEventListener extends UntypedActor {
     private SupervisorStrategy restartOrEsclate;
 
     private ActorRef mediator;
+    private ActorRef caller;
 
     @Autowired
     ActorRef defEventStoreSupervisorShardRegion;
@@ -68,18 +70,25 @@ public class DefEventListener extends UntypedActor {
 
     @Override
     public void onReceive(Object msg) {
-        log.info("Subscriber Got: {}"+  msg.toString());
-        if (msg instanceof AssignmentEvent) {
-            log.info("Subscriber Got: {}" + ((AssignmentEvent) msg).getEventName());
+        System.out.println("Subscriber Got: {}"+  msg.toString());
+        if (msg instanceof IgnoreErroedEvent) {
+            System.out.println("Worker Supervisor: Got and forwarding to the persistent actor worker: "+ ((AssignmentEvent) msg).getEventName());
             defEventStoreSupervisorShardRegion.tell(msg, getSelf());
-            getSender().tell(new EDFEventDeliveryAck(((AssignmentEvent) msg).getEventDeliveryId()), getSelf());
+            caller = getSender();
+        } else if (msg instanceof EDFEventDeliveryAck) {
+            caller.tell(msg, getSelf());
+        }else if (msg instanceof AssignmentEvent) {
+            System.out.println("Subscriber Got: {}" + ((AssignmentEvent) msg).getEventName());
+            defEventStoreSupervisorShardRegion.tell(msg, getSelf());
+            caller = getSender();
+            getSender().tell(new EDFEventDeliveryAck(((AssignmentEvent) msg).getEventDeliveryId(), true), getSelf());
         } else if (msg instanceof DistributedPubSubMediator.SubscribeAck) {
-            log.info("Listener: subscribing");
+            System.out.println("Listener: subscribing");
         } else if (msg.equals(ReceiveTimeout.getInstance())){
             getContext().parent().tell(new ShardRegion.Passivate(PoisonPill.getInstance()), getSelf());
         }else if (msg instanceof Terminated) {
             System.out.println("Listener:  Termination process kicked, will reconnect after 10 sec");
-            getContext().system().scheduler().scheduleOnce(Duration.create(10, "seconds"), getSelf(), Reconnect,getContext().dispatcher(), null);
+            getContext().system().scheduler().scheduleOnce(Duration.create(10, "seconds"), getSelf(), Reconnect, getContext().dispatcher(), null);
         }else if (msg.equals(Reconnect)) {
             System.out.println("Listener:  Reconnect process started.");
             // Re-establish storage after the scheduled delay

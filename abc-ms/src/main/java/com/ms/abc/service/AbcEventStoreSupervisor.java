@@ -5,14 +5,21 @@ import akka.cluster.pubsub.DistributedPubSubMediator;
 import akka.cluster.sharding.ShardRegion;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
+import akka.japi.Function;
+import com.ms.common.WrapperException;
 import com.ms.config.SpringExtension;
 import com.ms.event.AssignmentEvent;
+import com.ms.event.EDFEvent;
+import com.ms.event.IgnoreErroedEvent;
+import com.ms.event.StoredEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 import scala.concurrent.duration.Duration;
+
+import static akka.actor.SupervisorStrategy.*;
 
 /**
  * Created by davenkat on 9/28/2015.
@@ -25,8 +32,10 @@ public class AbcEventStoreSupervisor extends UntypedActor {
     @Autowired
     private SpringExtension springExtension;
 
+/*
     @Autowired
     private SupervisorStrategy restartOrEsclate;
+*/
 
     @Autowired
     private Props abcEventStoreActorProps;
@@ -44,16 +53,48 @@ public class AbcEventStoreSupervisor extends UntypedActor {
         eventStoreRef = getContext().watch(getContext().actorOf(abcEventStoreActorProps, "abcEventStoreActor"));
     }
 
+    public SupervisorStrategy restartOrEsclate() {
+        SupervisorStrategy strategy = new OneForOneStrategy(-1, Duration.create("5 seconds"), new Function<Throwable, SupervisorStrategy.Directive>() {
+            @Override
+            public SupervisorStrategy.Directive apply(Throwable th) {
+                if (th instanceof WrapperException) {
+                    System.out.println("AbcEventStoreSupervisor supervisor strategy called");
+                    Throwable t = th.getCause();
+                    if (t instanceof ServiceUnavailable) {
+                        System.out.println("oneToOne: restartOrEsclate strategy, escalate");
+                        return escalate();
+                    } else if (t instanceof DataStoreException) {
+                        System.out.println("oneToOne: DataStoreException invoked, escalating to oneToAll @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
+                        return restart();
+                    }else {
+                        System.out.println("AbcEventStoreSupervisor supervisor strategy: final else called sending ignore event");
+                        getSender().tell(new IgnoreErroedEvent((StoredEvent) ((WrapperException) th).getObj()), getSelf());
+                        return resume();
+                    }
+                } else {
+                    System.out.println("oneToOne: final else called escalating to oneToAll");
+                    return resume();
+                }
+            }
+        });
+        return strategy;
+    }
+
+
     @Override
     public SupervisorStrategy supervisorStrategy() {
         log.info("WorkerSupervisor: supervisorStrategy invoked #################################################");
-        return restartOrEsclate;
+        return restartOrEsclate();
     }
 
     static final Object Reconnect = "Reconnect";
 
     public void onReceive(Object msg) {
         log.info("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%v " + msg.toString());
+        if (msg instanceof IgnoreErroedEvent) {
+            log.info("Worker Supervisor: Got and forwarding to the persistent actor worker: ", ((AssignmentEvent) msg).getEventName());
+            eventStoreRef.forward(msg, getContext());
+        }else
         if (msg instanceof AssignmentEvent) {
             log.info("Worker Supervisor: Got and forwarding to the persistent actor worker: ", ((AssignmentEvent) msg).getEventName());
             eventStoreRef.forward(msg, getContext());

@@ -29,7 +29,7 @@ public abstract class AtleastOnceEventSender extends UntypedPersistentActorWithA
 
     @Override
     public void onReceiveCommand(Object message) {
-        LOG.info("Event Sender received ===>" + message.toString());
+        System.out.println("Event Sender received ===>" + message.toString());
 
         /* Step1: The event sender receives a regular message.
          Using the message create MsgSent object and store that in the db.*/
@@ -43,7 +43,7 @@ public abstract class AtleastOnceEventSender extends UntypedPersistentActorWithA
                 }
             });
         } else if (message instanceof EDFEventDeliveryAck) {
-            LOG.info("EventSender received confirmation ===>" + message.toString());
+            System.out.println("EventSender received confirmation ===>" + message.toString());
             /*Step4: The destination (MyDestination) sends a Confirm object to the sender (EventSender). */
             EDFEventDeliveryAck confirm = (EDFEventDeliveryAck) message;
             persist(confirm, new Procedure<EDFEventDeliveryAck>() {
@@ -58,7 +58,7 @@ public abstract class AtleastOnceEventSender extends UntypedPersistentActorWithA
 
     @Override
     public void onReceiveRecover(Object event) {
-        LOG.info("Event Sender recovered object.. " + event.toString());
+        System.out.println("Event Sender recovered object.. " + event.toString());
 
         updateState(event);
     }
@@ -78,7 +78,7 @@ public abstract class AtleastOnceEventSender extends UntypedPersistentActorWithA
             });
         } else if (event instanceof EDFEventDeliveryAck) {
             final EDFEventDeliveryAck ack = (EDFEventDeliveryAck) event;
-            LOG.info("Confirmation received==>" + ack.getEventDeliveryId());
+            System.out.println("Confirmation received==>" + ack.getEventDeliveryId());
             confirmDelivery(ack.getEventDeliveryId());
         }
     }

@@ -26,10 +26,20 @@ public class DefEventStoreActor extends PersistentActor {
         return "DefEventStoreActor-" + getContext().parent().path().name();
     }
 
+    @Override
+    protected String getCmdProcessorName() {
+        return "DefEventStoreActor";
+    }
+
 
     @Override
     protected boolean validateEvent(EDFEvent edfEvent) {
         return true;
+    }
+
+    @Override
+    protected void preProcessEvent(EDFEvent edfEvent) {
+
     }
 
     @Override
@@ -38,12 +48,17 @@ public class DefEventStoreActor extends PersistentActor {
     }
 
     @Override
-    protected void publishDoneEvent(EDFEvent edfEvent) {
+    protected void postProcessEvent(EDFEvent edfEvent) {
+
+    }
+
+    @Override
+    protected EDFEvent publishDoneEvent(EDFEvent edfEvent) {
         if(edfEvent.getEventName().equals(EDFEvent.APPSTATUS.ASSIGNED.name())){
             System.out.println("Status is closed publishing on closed event");
             edfEvent.setEventName(EDFEvent.APPSTATUS.ACQUIRED.name());
             eventDispatcher.dispatchToAbc(edfEvent);
         }
-
+        return edfEvent;
     }
 }

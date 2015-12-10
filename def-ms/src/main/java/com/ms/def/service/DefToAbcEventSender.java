@@ -11,7 +11,9 @@ import org.springframework.stereotype.Component;
 @Scope("prototype")
 public class DefToAbcEventSender extends AtleastOnceEventSender {
     @Override
-    public String persistenceId() { return "DefToAbcEventSender"; }
+    public String persistenceId() {
+        return "DefToAbcEventSender-" + getContext().parent().path().name();
+    }
 
     @Override
     protected String destinationActorPath() {

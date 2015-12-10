@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 @Component
 @Scope("prototype")
 public class AbcEventStoreActor extends PersistentActor {
+    public static int count=0;
     private static final Logger log= LoggerFactory.getLogger(AbcEventStoreActor.class);
 
     @Autowired
@@ -26,6 +27,11 @@ public class AbcEventStoreActor extends PersistentActor {
         return "AbcEventStoreActor-" + getContext().parent().path().name();
     }
 
+    @Override
+    protected String getCmdProcessorName() {
+        return "AbcEventStoreActor";
+    }
+
 
     @Override
     protected boolean validateEvent(EDFEvent edfEvent) {
@@ -33,20 +39,53 @@ public class AbcEventStoreActor extends PersistentActor {
     }
 
     @Override
-    protected void processEvent(EDFEvent edfEvent) {
-        if(edfEvent.getEventName().equals(EDFEvent.APPSTATUS.ASSIGNED.name())){
-            throw new RuntimeException("Intentional Error !!!!");
-        }
+    protected void preProcessEvent(EDFEvent edfEvent) {
 
-        System.out.println("Successfully processed event");
     }
 
     @Override
-    protected void publishDoneEvent(EDFEvent edfEvent) {
+    protected void processEvent(EDFEvent edfEvent) {
+        if(edfEvent.getEventName().equals(EDFEvent.APPSTATUS.ASSIGNED.name())){
+            if(count==0){
+                System.out.println("DataStoreException , Counter "+count);
+                count++;
+                throw new DataStoreException("DataStoreException Intentional Error  !!!!");
+            }
+
+            if(count<=3){
+                System.out.println("ServiceUnavailable, Counter "+count);
+                count++;
+                throw new ServiceUnavailable("ServiceUnavailable Intentional Error !!!!");
+            }
+
+            if(count==4){
+                System.out.println("RuntimeException, Counter "+count);
+                count++;
+                throw new RuntimeException("RuntimeException Intentional Error !!!!");
+            }
+
+            if(count==5){
+                System.out.println("Processing ... "+count);
+                count=0;
+            }
+        }
+
+
+        System.out.println("AbcEventStoreActor ===> Successfully processed event");
+    }
+
+    @Override
+    protected void postProcessEvent(EDFEvent edfEvent) {
+
+    }
+
+    @Override
+    protected EDFEvent publishDoneEvent(EDFEvent edfEvent) {
         if(edfEvent.getEventName().equals(EDFEvent.APPSTATUS.ACQUIRED.name())){
             System.out.println("Publishing ACQUIRED event");
             edfEvent.setEventName(EDFEvent.STATUS.INPROGRESS.name());
             eventDispatcher.dispatchToDef(edfEvent);
         }
+        return edfEvent;
     }
 }
