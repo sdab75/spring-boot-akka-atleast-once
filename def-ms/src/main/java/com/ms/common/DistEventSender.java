@@ -8,11 +8,15 @@ import akka.cluster.pubsub.DistributedPubSub;
 import akka.cluster.pubsub.DistributedPubSubMediator;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
+import akka.pattern.Patterns;
 import com.ms.event.EDFEvent;
 import com.ms.event.EDFEventDeliveryAck;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import scala.concurrent.Future;
+
+import java.util.concurrent.Callable;
 
 /**
  * Created by davenkat on 9/28/2015.
@@ -27,16 +31,27 @@ public abstract class DistEventSender extends NonPersistentActor {
         mediator.tell(new DistributedPubSubMediator.Put(getSelf()), getSelf());
         ClusterClientReceptionist.get(getContext().system()).registerService(getSelf());
     }
+    private ActorRef caller;
 
     @Override
     protected void processReceivedEvent(Object msg) {
         if (msg instanceof EDFEvent) {
-            System.out.println("Publisher: Received from ===>"+getSender().path() +"===>"+msg.toString());
-            mediator.tell(new DistributedPubSubMediator.Send(destinationPath(), msg, false), getSelf());
+            System.out.println("Def DistEventSender: Received message from ===>" + getSender().path() + "===>" + msg.toString());
+            caller = getSender();
+
+            Future<Object> cbFuture = circuitBreaker.callWithCircuitBreaker(new Callable<Future<Object>>() {
+                @Override
+                public Future<Object> call() throws Exception {
+                    return Patterns.ask(mediator, new DistributedPubSubMediator.Send(destinationPath(), msg, false), ASK_TIMEOUT);
+                }
+            });
+            Patterns.pipe(cbFuture, getContext().system().dispatcher()).to(caller);
+
+            //   mediator.tell(new DistributedPubSubMediator.Send(destinationPath(), msg, false), getSelf());
         }else if (msg instanceof EDFEventDeliveryAck) {
 //            String path="/user/eventSender";
             ActorSelection eventSenderRef = getContext().actorSelection(senderAckPath());
-            System.out.println("Publlisher Sending confirmation back to ===>"+eventSenderRef.path() +"===>"+msg.toString());
+            System.out.println("Def DistEventSender Sending confirmation back to ===>" + eventSenderRef.path() + "===>" + msg.toString());
             /*Step4: The destination (MyDestination) sends a Confirm object to the sender (EventSender). */
             EDFEventDeliveryAck confirm = (EDFEventDeliveryAck) msg;
             eventSenderRef.tell(confirm, getSelf());
