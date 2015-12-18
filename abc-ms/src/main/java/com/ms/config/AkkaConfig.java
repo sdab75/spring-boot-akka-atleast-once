@@ -68,6 +68,11 @@ public class AkkaConfig extends WebMvcConfigurerAdapter {
         return ClusterShardingSettings.create(actorSystem()).withRole("abcService");
     }
 
+    @Bean
+    public ActorRef deadLetterInit() {
+        ActorRef actor=actorSystem().actorOf(springExtension.props("deadLetterActor"), "deadLetterActor");
+        return actor;
+    }
 
     @Bean
     public ClusterSharding clusterSharding(){

@@ -32,11 +32,6 @@ public class AbcEventStoreSupervisor extends UntypedActor {
     @Autowired
     private SpringExtension springExtension;
 
-/*
-    @Autowired
-    private SupervisorStrategy restartOrEsclate;
-*/
-
     @Autowired
     private Props abcEventStoreActorProps;
 

@@ -16,7 +16,6 @@ import org.springframework.stereotype.Component;
 @Component
 @Scope("prototype")
 public class AbcEventStoreActor extends PersistentActor {
-    public static int count=0;
     private static final Logger log= LoggerFactory.getLogger(AbcEventStoreActor.class);
 
     @Autowired
@@ -69,8 +68,6 @@ public class AbcEventStoreActor extends PersistentActor {
                 count=0;
             }
         }
-
-
         System.out.println("AbcEventStoreActor ===> Successfully processed event");
     }
 
