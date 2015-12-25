@@ -2,17 +2,15 @@ package com.ms.common;
 
 import akka.actor.ActorRef;
 import akka.actor.ActorSelection;
-import akka.actor.UntypedActor;
 import akka.cluster.client.ClusterClientReceptionist;
 import akka.cluster.pubsub.DistributedPubSub;
 import akka.cluster.pubsub.DistributedPubSubMediator;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 import akka.pattern.Patterns;
+import akka.util.Timeout;
 import com.ms.event.EDFEvent;
 import com.ms.event.EDFEventDeliveryAck;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import scala.concurrent.Future;
 
@@ -23,11 +21,13 @@ import java.util.concurrent.Callable;
  */
 @Component
 public abstract class DistEventSender extends NonPersistentActor {
-    private static final Logger log = LoggerFactory.getLogger(DistEventSender.class);
+    private LoggingAdapter LOG = Logging.getLogger(getContext().system(), this);
 
     // activate the extension
     ActorRef mediator =DistributedPubSub.get(getContext().system()).mediator();
     public DistEventSender(){
+
+        super();
         mediator.tell(new DistributedPubSubMediator.Put(getSelf()), getSelf());
         ClusterClientReceptionist.get(getContext().system()).registerService(getSelf());
     }
@@ -36,34 +36,36 @@ public abstract class DistEventSender extends NonPersistentActor {
     @Override
     protected void processReceivedEvent(Object msg) {
         if (msg instanceof EDFEvent) {
-            System.out.println("Def DistEventSender: Received message from ===>" + getSender().path() + "===>" + msg.toString());
+            log("Received msg from ===>"+getSender().path() +"===>"+msg.toString());
             caller = getSender();
-
-            Future<Object> cbFuture = circuitBreaker.callWithCircuitBreaker(new Callable<Future<Object>>() {
+            Future<Object> cbFuture = getCircuitBreaker().callWithCircuitBreaker(new Callable<Future<Object>>() {
                 @Override
                 public Future<Object> call() throws Exception {
-                    return Patterns.ask(mediator, new DistributedPubSubMediator.Send(destinationPath(), msg, false), ASK_TIMEOUT);
+                    return Patterns.ask(mediator, new DistributedPubSubMediator.Send(destinationPath(), msg, false),getResponseTime())
+                            ;
                 }
             });
             Patterns.pipe(cbFuture, getContext().system().dispatcher()).to(caller);
-
-            //   mediator.tell(new DistributedPubSubMediator.Send(destinationPath(), msg, false), getSelf());
         }else if (msg instanceof EDFEventDeliveryAck) {
-//            String path="/user/eventSender";
             ActorSelection eventSenderRef = getContext().actorSelection(senderAckPath());
-            System.out.println("Def DistEventSender Sending confirmation back to ===>" + eventSenderRef.path() + "===>" + msg.toString());
+            log("Sending confirmation back to ===>" + eventSenderRef.path() + "===>" + msg.toString());
             /*Step4: The destination (MyDestination) sends a Confirm object to the sender (EventSender). */
             EDFEventDeliveryAck confirm = (EDFEventDeliveryAck) msg;
             eventSenderRef.tell(confirm, getSelf());
         }
         else if (msg instanceof DistributedPubSubMediator.SubscribeAck)
-            System.out.println("publisher subscribing");
+            log("publisher subscribing");
         else {
             unhandled(msg);
         }
-
     }
+    protected void log(String msg){
+        LOG.info(actorName()+" : "+msg);
+    }
+
+    protected abstract String actorName();
     protected abstract String destinationPath();
     protected abstract String senderAckPath();
+    protected abstract Timeout getResponseTime();
 
 }

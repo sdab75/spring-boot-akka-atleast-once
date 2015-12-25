@@ -14,35 +14,32 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-
-/**
- * Created by davenkat on 9/28/2015.
- */
 @Component
 public abstract class PersistentActor extends UntypedPersistentActor {
     private static final Logger LOG = LoggerFactory.getLogger(PersistentActor.class);
 
+
     @Override
     public void preStart() throws Exception {
-        System.out.println(getCmdProcessorName() + " Starting ......");
+        LOG.info(actorName() + " Starting ......");
         super.preStart();
     }
 
     @Override
     public String persistenceId() {
-        return getCmdProcessorName() + "-" + getContext().parent().path().name();
+        return actorName() + "-" + getContext().parent().path().name();
     }
 
 
     @Override
     public boolean recoveryFinished() {
-        System.out.println(getCmdProcessorName() + " Recovery Finished !!!");
+        LOG.info(actorName() + " Recovery Finished !!!");
         return super.recoveryFinished();
     }
 
     @Override
     public void onRecoveryFailure(Throwable cause, scala.Option<Object> event) {
-        LOG.error(getCmdProcessorName() + " Recovery Failed !!!");
+        LOG.error(actorName() + " Recovery Failed !!!");
         super.onRecoveryFailure(cause, event);
     }
 
@@ -50,7 +47,7 @@ public abstract class PersistentActor extends UntypedPersistentActor {
     public void onReceiveRecover(Object msg) {
         if (msg instanceof StoredEvent) {
             StoredEvent storedEvent = (StoredEvent) msg;
-            System.out.println(getCmdProcessorName() + " Recovered Event -->" + storedEvent.getEDFEvent().toString());
+            log("Recovered Event -->" + storedEvent.getEDFEvent().toString());
             processStoredEvent(storedEvent);
         } else {
             unhandled(msg);
@@ -60,14 +57,11 @@ public abstract class PersistentActor extends UntypedPersistentActor {
     @Override
     public void onReceiveCommand(Object cmd) {
         try {
-            //Arming the security
             processCommand(cmd);
         } finally {
         }
 
     }
-
-    public static int count = 0;
 
     /**
      * Common orchestration for a persistent actor.
@@ -76,13 +70,13 @@ public abstract class PersistentActor extends UntypedPersistentActor {
      */
     protected void processCommand(Object cmd) {
         if (cmd instanceof IgnoreErroedEvent) {
-            System.out.println(" Persistent actor received IgnoreErroedEvent from the supervisor...");
+            log(" Persistent actor received IgnoreErroedEvent from the supervisor...");
             //This is a persisted event and failed for some reason. The supervisor determines received error can't be processed further and can't retry anymore.
             //To achieve this
             saveSnapshot(((IgnoreErroedEvent) cmd).getStoredEvent());
         } else if (cmd instanceof EDFEvent) {
             EDFEvent evt = ((EDFEvent) cmd);
-            System.out.println(getCmdProcessorName() + " Received command ...");
+            log("Received command ...");
             if (validateEvent(evt)) {
                 StoredEvent storedEvent = new StoredEvent(evt);
                 persist(storedEvent, new Procedure<StoredEvent>() {
@@ -90,37 +84,17 @@ public abstract class PersistentActor extends UntypedPersistentActor {
                         processStoredEvent(storedEvent);
                     }
                 });
-                sleep();
                 getSender().tell(new EDFEventDeliveryAck(evt.getEventDeliveryId(), true), getSelf());
             } else {
-                sleep();
                 getSender().tell(new EDFEventDeliveryAck(evt.getEventDeliveryId(), false), getSelf());
             }
         } else if (cmd instanceof DistributedPubSubMediator.SubscribeAck) {
-            System.out.println(getCmdProcessorName() + " successfully subscribed for receiving event messages !!!!");
+            log("successfully subscribed for receiving event messages !!!!");
         } else if (cmd.equals(ReceiveTimeout.getInstance())) {
-            System.out.println(getCmdProcessorName() + " received idle time out kicked off and restart the Actor !!!!");
+            log("received idle time out kicked off and restart the Actor !!!!");
             getContext().parent().tell(new ShardRegion.Passivate(PoisonPill.getInstance()), getSelf());
         } else
             unhandled(cmd);
-    }
-
-    private void sleep() {
-        try {
-            if (count < 5) {
-                System.out.println("Counter " + count + "==> waiting for ==>" + 4);
-                count++;
-                Thread.sleep(100);
-            }
-
-            if (count == 5) {
-                System.out.println("Counter " + count + "==> waiting for ==>" + 5);
-                count = 0;
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
     }
 
     /**
@@ -130,18 +104,18 @@ public abstract class PersistentActor extends UntypedPersistentActor {
      */
     private void processStoredEvent(StoredEvent storedEvent) {
         {
+
             try {
-                //Arming the security
-                System.out.println(getCmdProcessorName() + " stored EDFEvent successfully, processing of the stored Event started ..");
                 try {
+                    log("stored EDFEvent successfully, processing of the stored Event started ..");
                     preProcessEvent(storedEvent.getEDFEvent());
                     processEvent(storedEvent.getEDFEvent());
                     saveSnapshot(storedEvent);
                     postProcessEvent(storedEvent.getEDFEvent());
+                    log("EDF Event processing finished ...");
                 } catch (Exception e) {
-                    throw new WrapperException("Exception raised while persistent actor processing the event !!  ", storedEvent, e);
+                    throw new AsyncWrapperException("Exception raised while persistent actor processing the event !!  ", storedEvent, e);
                 }
-                System.out.println(getCmdProcessorName() + " EDF Event processing finished ...");
 
                 //For any further event publishing
                 EDFEvent eventToPublish = publishDoneEvent(storedEvent.getEDFEvent());
@@ -155,7 +129,11 @@ public abstract class PersistentActor extends UntypedPersistentActor {
         }
     }
 
-    abstract protected String getCmdProcessorName();
+    protected void log(String msg) {
+        LOG.info(actorName() + " : " + msg);
+    }
+
+    abstract protected String actorName();
 
     abstract protected boolean validateEvent(EDFEvent edfEvent);
 

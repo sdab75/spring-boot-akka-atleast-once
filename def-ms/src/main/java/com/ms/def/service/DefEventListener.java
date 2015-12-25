@@ -5,14 +5,22 @@ import akka.cluster.client.ClusterClientReceptionist;
 import akka.cluster.pubsub.DistributedPubSub;
 import akka.cluster.pubsub.DistributedPubSubMediator;
 import akka.cluster.sharding.ShardRegion;
+import akka.pattern.CircuitBreaker;
+import akka.pattern.Patterns;
+import akka.util.Timeout;
+import com.ms.common.CircuitBreakerUtil;
+import com.ms.common.NonPersistentActor;
+import com.ms.common.SuperVisorStrategyUtil;
 import com.ms.event.AssignmentEvent;
 import com.ms.event.EDFEventDeliveryAck;
 import com.ms.event.IgnoreErroedEvent;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
+import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
 
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,10 +30,9 @@ import org.slf4j.LoggerFactory;
  */
 @Component
 @Scope("prototype")
-public class DefEventListener extends UntypedActor {
-    private static final Logger log= LoggerFactory.getLogger(DefEventListener.class);
-    @Autowired
-    private SupervisorStrategy restartOrEsclate;
+public class DefEventListener extends NonPersistentActor {
+    private static final Logger log = LoggerFactory.getLogger(DefEventListener.class);
+
 
     private ActorRef mediator;
     private ActorRef caller;
@@ -39,14 +46,17 @@ public class DefEventListener extends UntypedActor {
         super.preStart();
         context().setReceiveTimeout(Duration.create(155, TimeUnit.SECONDS));
     }
-    private void initSubscriber(){
+
+    private void initSubscriber() {
         System.out.println("Starting up");
     }
 
     @Override
     public SupervisorStrategy supervisorStrategy() {
-        return restartOrEsclate;
+        log("supervision strategy kicked off");
+        return SuperVisorStrategyUtil.listenerSupervisorStrategy(actorName(), getSender(), getSelf());
     }
+
 
     public DefEventListener() {
         //Testing copy
@@ -54,6 +64,7 @@ public class DefEventListener extends UntypedActor {
         mediator.tell(new DistributedPubSubMediator.Put(getSelf()), getSelf());
         ClusterClientReceptionist.get(getContext().system()).registerService(getSelf());
     }
+
     static final Object Reconnect = "Reconnect";
 
     @Override
@@ -69,32 +80,60 @@ public class DefEventListener extends UntypedActor {
     }
 
     @Override
-    public void onReceive(Object msg) {
-        System.out.println("Subscriber Got: {}"+  msg.toString());
+    protected void processReceivedEvent(Object msg) {
+        System.out.println("Subscriber Got: {}" + msg.toString());
         if (msg instanceof IgnoreErroedEvent) {
-            System.out.println("Worker Supervisor: Got and forwarding to the persistent actor worker: "+ ((AssignmentEvent) msg).getEventName());
+            System.out.println("Worker Supervisor: Got and forwarding to the persistent actor worker: " + ((AssignmentEvent) msg).getEventName());
             defEventStoreSupervisorShardRegion.tell(msg, getSelf());
             caller = getSender();
         } else if (msg instanceof EDFEventDeliveryAck) {
             caller.tell(msg, getSelf());
-        }else if (msg instanceof AssignmentEvent) {
-            System.out.println("Subscriber Got: {}" + ((AssignmentEvent) msg).getEventName());
-            defEventStoreSupervisorShardRegion.tell(msg, getSelf());
+        } else if (msg instanceof AssignmentEvent) {
+            System.out.println("DefEventListener Got: {}" + ((AssignmentEvent) msg).getEventName());
             caller = getSender();
-            getSender().tell(new EDFEventDeliveryAck(((AssignmentEvent) msg).getEventDeliveryId(), true), getSelf());
+            Future<Object> cbFuture = getCircuitBreaker().callWithCircuitBreaker(new Callable<Future<Object>>() {
+                @Override
+                public Future<Object> call() throws Exception {
+                    return Patterns.ask(defEventStoreSupervisorShardRegion, msg, Timeout.apply(responseTimeout, TimeUnit.MILLISECONDS));
+                }
+            });
+            Patterns.pipe(cbFuture, getContext().system().dispatcher()).to(getSelf());
         } else if (msg instanceof DistributedPubSubMediator.SubscribeAck) {
             System.out.println("Listener: subscribing");
-        } else if (msg.equals(ReceiveTimeout.getInstance())){
+        } else if (msg.equals(ReceiveTimeout.getInstance())) {
             getContext().parent().tell(new ShardRegion.Passivate(PoisonPill.getInstance()), getSelf());
-        }else if (msg instanceof Terminated) {
+        } else if (msg instanceof Terminated) {
             System.out.println("Listener:  Termination process kicked, will reconnect after 10 sec");
             getContext().system().scheduler().scheduleOnce(Duration.create(10, "seconds"), getSelf(), Reconnect, getContext().dispatcher(), null);
-        }else if (msg.equals(Reconnect)) {
+        } else if (msg.equals(Reconnect)) {
             System.out.println("Listener:  Reconnect process started.");
             // Re-establish storage after the scheduled delay
             initSubscriber();
-        }else {
+        } else {
             unhandled(msg);
         }
+    }
+
+
+    @Override
+    protected String actorName() {
+        return "DefEventListener";
+    }
+
+    private int maxFailures = 2;
+    private int responseTimeout = 100;
+    private int callFailureTimeout = 100;
+    private int resetTimeout = 20;
+
+    @Autowired
+    CircuitBreakerUtil circuitBreakerUtil;
+
+
+    @Override
+    protected CircuitBreaker getCircuitBreaker() {
+        return circuitBreakerUtil.getCircuitBreaker(actorName(), getContext().dispatcher(),
+                getContext().system().scheduler(), maxFailures,
+                Duration.create(responseTimeout, TimeUnit.MILLISECONDS),
+                Duration.create(resetTimeout, TimeUnit.SECONDS));
     }
 }

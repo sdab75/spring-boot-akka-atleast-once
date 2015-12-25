@@ -27,10 +27,9 @@ public class DefEventStoreActor extends PersistentActor {
     }
 
     @Override
-    protected String getCmdProcessorName() {
+    protected String actorName() {
         return "DefEventStoreActor";
     }
-
 
     @Override
     protected boolean validateEvent(EDFEvent edfEvent) {

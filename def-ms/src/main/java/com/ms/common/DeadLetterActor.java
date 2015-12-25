@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 public class DeadLetterActor extends UntypedActor {
     public void onReceive(Object message) {
         if (message instanceof DeadLetter) {
-            System.out.println("DEF ==> DeadLetterActor Message ===>"+message.toString());
+            System.out.println("ABC ==>DeadLetterActor Message ===>"+message.toString());
         }
     }
 }

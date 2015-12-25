@@ -1,14 +1,12 @@
 package com.ms.config;
 
-import akka.actor.*;
+import akka.actor.ActorRef;
+import akka.actor.ActorSystem;
+import akka.actor.Props;
 import akka.cluster.sharding.ClusterSharding;
 import akka.cluster.sharding.ClusterShardingSettings;
 import akka.cluster.sharding.ShardRegion;
-import akka.japi.Function;
-import akka.japi.Option;
 import akka.routing.RoundRobinPool;
-import com.ms.def.service.DataStoreException;
-import com.ms.def.service.ServiceUnavailable;
 import com.ms.event.AssignmentEvent;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
@@ -16,14 +14,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
-import org.springframework.context.annotation.*;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter;
-import scala.concurrent.duration.Duration;
 
 import java.util.Optional;
-
-import static akka.actor.SupervisorStrategy.*;
 
 @Configuration
 //@Lazy
@@ -161,33 +157,6 @@ public class AkkaConfig extends WebMvcConfigurerAdapter {
 
         };
         return messageExtractor;
-    }
-
-
-    @Bean
-    // Restart the child when ServiceUnavailable is thrown.
-    // After 3 restarts within 5 seconds it will escalate to the supervisor which may stop the process.
-    public SupervisorStrategy restartOrEsclate() {
-        SupervisorStrategy strategy = new OneForOneStrategy(-1,Duration.create("5 seconds"), new Function<Throwable, SupervisorStrategy.Directive>() {
-            @Override
-            public SupervisorStrategy.Directive apply(Throwable t) {
-                if (t instanceof NullPointerException) {
-                    System.out.println("oneToOne: restartOrEsclate strategy, restarting the actor");
-                    return restart();
-                }else if (t instanceof ServiceUnavailable) {
-                    System.out.println("oneToOne: restartOrEsclate strategy, escalate");
-                    return escalate();
-                }else if (t instanceof DataStoreException) {
-                    System.out.println("oneToOne: DataStoreException invoked, escalating to oneToAll @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
-//                    return restart();
-                    return stop();
-                }  else {
-                    System.out.println("oneToOne: final else called escalating to oneToAll");
-                    return escalate();
-                }
-            }
-        });
-        return strategy;
     }
 
     /**
