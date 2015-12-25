@@ -1,19 +1,18 @@
 package com.ms.common;
 
 import akka.actor.ActorSelection;
+import akka.event.Logging;
+import akka.event.LoggingAdapter;
 import akka.japi.Function;
 import akka.japi.Procedure;
 import akka.persistence.UntypedPersistentActorWithAtLeastOnceDelivery;
 import com.ms.event.EDFEvent;
 import com.ms.event.EDFEventDeliveryAck;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public abstract class AtleastOnceEventSender extends UntypedPersistentActorWithAtLeastOnceDelivery {
-
-    private static final Logger LOG = LoggerFactory.getLogger(AtleastOnceEventSender.class);
+    private LoggingAdapter LOG = Logging.getLogger(getContext().system(), this);
 
     String path=null;
 
@@ -29,7 +28,6 @@ public abstract class AtleastOnceEventSender extends UntypedPersistentActorWithA
 
     @Override
     public void onReceiveCommand(Object message) {
-        System.out.println("Abc AtleastOnceEventSender Sender received ===>" + message.toString());
 
         /* Step1: The event sender receives a regular message.
          Using the message create MsgSent object and store that in the db.*/
@@ -43,7 +41,7 @@ public abstract class AtleastOnceEventSender extends UntypedPersistentActorWithA
                 }
             });
         } else if (message instanceof EDFEventDeliveryAck) {
-            System.out.println("Abc AtleastOnceEventSender received confirmation ===>" + message.toString());
+            log("Received confirmation ===>" + message.toString());
             /*Step4: The destination (MyDestination) sends a Confirm object to the sender (EventSender). */
             EDFEventDeliveryAck confirm = (EDFEventDeliveryAck) message;
             persist(confirm, new Procedure<EDFEventDeliveryAck>() {
@@ -52,19 +50,21 @@ public abstract class AtleastOnceEventSender extends UntypedPersistentActorWithA
                 }
             });
         } else {
+            log("Received unhandled object ===>" + message.toString());
             unhandled(message);
         }
     }
 
     @Override
     public void onReceiveRecover(Object event) {
-        System.out.println("Abc AtleastOnceEventSender recovered object.. " + event.toString());
+        log("Recovered object info ===>" + event.toString());
 
         updateState(event);
     }
 
     void updateState(Object event) {
         if (event instanceof EDFEvent) {
+            log("Sending message to ===>" +destinationActorPath()+", with event data ===> "+ event.toString());
             /*Step3: Using MsgSent this operation creates the destination object (Msg)
             and asynchronously delivers Msg to the destination.
              The confirmation will be sent by the destination and this operation is not waiting for the confirmation.*/
@@ -78,15 +78,17 @@ public abstract class AtleastOnceEventSender extends UntypedPersistentActorWithA
             });
         } else if (event instanceof EDFEventDeliveryAck) {
             final EDFEventDeliveryAck ack = (EDFEventDeliveryAck) event;
-            System.out.println("Abc AtleastOnceEventSender received Confirmation ==>" + ack.getEventDeliveryId());
+            log("Received confirmation from "+getSender() +"with delivery Id==>" + ack.getEventDeliveryId());
             confirmDelivery(ack.getEventDeliveryId());
         }
     }
 
+    protected void log(String msg){
+        LOG.info(actorName() + " : " + msg);
+    }
 
     protected abstract String destinationActorPath();
 
+    protected abstract String actorName();
+
 }
-
-
-//#at-least-once-example

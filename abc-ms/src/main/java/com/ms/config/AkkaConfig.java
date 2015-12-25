@@ -1,14 +1,12 @@
 package com.ms.config;
 
-import akka.actor.*;
+import akka.actor.ActorRef;
+import akka.actor.ActorSystem;
+import akka.actor.Props;
 import akka.cluster.sharding.ClusterSharding;
 import akka.cluster.sharding.ClusterShardingSettings;
 import akka.cluster.sharding.ShardRegion;
-import akka.japi.Function;
-import akka.japi.Option;
 import akka.routing.RoundRobinPool;
-import com.ms.abc.service.DataStoreException;
-import com.ms.abc.service.ServiceUnavailable;
 import com.ms.event.AssignmentEvent;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
@@ -16,14 +14,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
-import org.springframework.context.annotation.*;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter;
-import scala.concurrent.duration.Duration;
-
-import java.util.Optional;
-
-import static akka.actor.SupervisorStrategy.*;
 
 @Configuration
 //@Lazy

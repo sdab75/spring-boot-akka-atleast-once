@@ -17,4 +17,9 @@ public class AbcToDefEventSender extends AtleastOnceEventSender {
     protected String destinationActorPath() {
         return "/user/abcToDefDistEventSender";
     }
+
+    @Override
+    protected String actorName() {
+        return "AbcToDefEventSender";
+    }
 }
