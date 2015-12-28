@@ -110,15 +110,20 @@ public class AkkaConfig extends WebMvcConfigurerAdapter {
 
     }
 
-    @Bean
+/*    @Bean
     public ActorRef abcEventStoreActorShardRegion() {
         return clusterSharding().start("abcEventStoreActor", abcEventStoreActorProps(), initClusterShardingSettings(), abcShardignessageExtractor());
-    }
+    }*/
 
 
     @Bean
     public ActorRef abcEventStoreSupervisorShardRegion() {
         return clusterSharding().start("abcEventStoreSupervisor", abcEventStoreSupervisorProps(), initClusterShardingSettings(), abcShardignessageExtractor());
+    }
+
+    @Bean
+    public ActorRef abcListenerShardRegionInit() {
+        return clusterSharding().start("abcListenerShardRegion", springExtension.props("abcEventListener"), initClusterShardingSettings(), abcShardignessageExtractor());
     }
 
     @Bean
