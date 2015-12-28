@@ -41,8 +41,8 @@ public abstract class DistEventSender extends NonPersistentActor {
             Future<Object> cbFuture = getCircuitBreaker().callWithCircuitBreaker(new Callable<Future<Object>>() {
                 @Override
                 public Future<Object> call() throws Exception {
-                    return Patterns.ask(mediator, new DistributedPubSubMediator.Send(destinationPath(), msg, false),getResponseTime())
-                            ;
+//                    return Patterns.ask(mediator, new DistributedPubSubMediator.Send(destinationPath().path().toString(), msg, false),getResponseTime());
+                    return Patterns.ask(destinationPath(), msg,getResponseTime());
                 }
             });
             Patterns.pipe(cbFuture, getContext().system().dispatcher()).to(caller);
@@ -64,7 +64,7 @@ public abstract class DistEventSender extends NonPersistentActor {
     }
 
     protected abstract String actorName();
-    protected abstract String destinationPath();
+    protected abstract ActorRef destinationPath();
     protected abstract String senderAckPath();
     protected abstract Timeout getResponseTime();
 

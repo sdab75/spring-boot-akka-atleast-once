@@ -50,17 +50,42 @@ public class AkkaConfig extends WebMvcConfigurerAdapter {
 
     @Bean
     public ActorRef defToAbcEventSenderActor() {
-        return actorSystem().actorOf(springExtension.props("defToAbcEventSender").withRouter(new RoundRobinPool(1)), "defToAbcEventSender");
+        return clusterSharding().start("defToAbcEventSender", springExtension.props("defToAbcEventSender"), initClusterShardingSettings(), defShardignessageExtractor());
+    }
+    @Bean
+    public ActorRef defToAbcDistEventSenderActor() {
+        return clusterSharding().start("defToAbcDistEventSender", springExtension.props("defToAbcDistEventSender"), initClusterShardingSettings(), defShardignessageExtractor());
     }
 
     @Bean
-    public ActorRef abcToDefDistEventSenderActor() {
-        return actorSystem().actorOf(springExtension.props("defToAbcDistEventSender").withRouter(new RoundRobinPool(1)), "defToAbcDistEventSender");
+    public ActorRef abcListenerShardRegionProxy() {
+        return clusterSharding().startProxy("abcListenerShardRegion",Optional.of("abcService") , defShardignessageExtractor());
     }
+
+/*
+    @Bean
+    public ActorRef abcListenerShardRegion() {
+//        return actorSystem().actorOf(springExtension.props("defToAbcEventSender").withRouter(new RoundRobinPool(1)), "defToAbcEventSender");
+        return clusterSharding().start("abcListenerSR", springExtension.props("abcEventListener"), initClusterShardingSettings(), defShardignessageExtractor());
+    }
+*/
+
+/*
+    @Bean
+    public ActorRef defToAbcSenderShardRegion() {
+        return clusterSharding().start("defToAbcEventSenderShardRegion", springExtension.props("defToAbcEventSender"), initClusterShardingSettings(), defShardignessageExtractor());
+    }
+*/
+
 
     @Bean
     public ClusterShardingSettings initClusterShardingSettings(){
         return ClusterShardingSettings.create(actorSystem()).withRole("defService");
+    }
+
+    @Bean
+    public ClusterShardingSettings initAbcClusterShardingSettings(){
+        return ClusterShardingSettings.create(actorSystem()).withRole("abcService");
     }
 
     @Bean
@@ -103,26 +128,18 @@ public class AkkaConfig extends WebMvcConfigurerAdapter {
 
     }
 
-
+/*
     @Bean
     public ActorRef defEventStoreActorShardRegion() {
         return clusterSharding().start("defEventStoreActor", defEventStoreActorProps(), initClusterShardingSettings(), defShardignessageExtractor());
     }
+*/
 
     @Bean
     public ActorRef defEventStoreSupervisorShardRegion() {
         return clusterSharding().start("defEventStoreSupervisor", defEventStoreSupervisorProps(), initClusterShardingSettings(), defShardignessageExtractor());
     }
 
-    @Bean
-    public ActorRef abcEventStoreActorShardRegion() {
-        return clusterSharding().startProxy("abcEventStoreActor",Optional.of("abcService") , defShardignessageExtractor());
-    }
-
-    @Bean
-    public ActorRef abcEventStoreSupervisorShardRegion() {
-        return clusterSharding().startProxy("abcEventStoreSupervisor", Optional.of("abcService"), defShardignessageExtractor());
-    }
 
     @Bean
     @Scope(value = "prototype")

@@ -1,5 +1,7 @@
 package com.ms.def.service;
 
+import akka.actor.ActorRef;
+import akka.cluster.sharding.ClusterSharding;
 import akka.pattern.CircuitBreaker;
 import akka.util.Timeout;
 import com.ms.common.CircuitBreakerUtil;
@@ -30,8 +32,8 @@ public class DefToAbcDistEventSender extends DistEventSender {
         return "DefToAbcDistEventSender";
     }
     @Override
-    protected String destinationPath() {
-        return "/user/abcEventListener";
+    protected ActorRef destinationPath() {
+        return ClusterSharding.get(getContext().system()).shardRegion("abcListenerShardRegion");
     }
 
     @Override

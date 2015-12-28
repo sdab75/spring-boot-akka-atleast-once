@@ -1,6 +1,10 @@
 package com.ms.def.service;
 
+import akka.actor.ActorPath;
+import akka.actor.ActorRef;
+import akka.cluster.sharding.ClusterSharding;
 import com.ms.common.AtleastOnceEventSender;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
@@ -15,10 +19,12 @@ public class DefToAbcEventSender extends AtleastOnceEventSender {
         return "DefToAbcEventSender-" + getContext().parent().path().name();
     }
 
+
     @Override
-    protected String destinationActorPath() {
-        return "/user/defToAbcDistEventSender";
+    protected ActorRef destinationActorPath() {
+        return ClusterSharding.get(getContext().system()).shardRegion("defToAbcDistEventSender");
     }
+
 
     @Override
     protected String actorName() {

@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/def")
@@ -20,7 +21,8 @@ public class DefController {
     @RequestMapping(value = "/event/to/abc", method = RequestMethod.POST)
     @ResponseBody
     public  void postEventToDef(@RequestBody AssignmentEvent assignmentEvent,HttpServletRequest request){
-        System.out.println("Controller : Dispatching to Abc Actor");
+        assignmentEvent.setModuleId(UUID.randomUUID().toString());
+        System.out.println("Controller : Dispatching to Abc Actor===>"+assignmentEvent.getModuleId());
         eventDispatcher.dispatchToAbc(assignmentEvent);
     }
 }
