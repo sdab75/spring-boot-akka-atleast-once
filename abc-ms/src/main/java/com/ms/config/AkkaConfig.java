@@ -148,7 +148,7 @@ public class AkkaConfig extends WebMvcConfigurerAdapter {
                 int numberOfShards = 100;
                 if (message instanceof AssignmentEvent) {
                     String uid = ((AssignmentEvent) message).getModuleId().toString();
-                    String shardId=String.valueOf(uid.length() % numberOfShards);;
+                    String shardId=String.valueOf(uid.hashCode() % numberOfShards);;
                     System.out.println("ShardId --->" + shardId);
                     return shardId;
                 } else {
