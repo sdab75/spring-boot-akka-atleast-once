@@ -49,36 +49,6 @@ public class AkkaConfig extends WebMvcConfigurerAdapter {
     }
 
     @Bean
-    public ActorRef defToAbcEventSenderActor() {
-        return clusterSharding().start("defToAbcEventSender", springExtension.props("defToAbcEventSender"), initClusterShardingSettings(), defShardignessageExtractor());
-    }
-    @Bean
-    public ActorRef defToAbcDistEventSenderActor() {
-        return clusterSharding().start("defToAbcDistEventSender", springExtension.props("defToAbcDistEventSender"), initClusterShardingSettings(), defShardignessageExtractor());
-    }
-
-    @Bean
-    public ActorRef abcListenerShardRegionProxy() {
-        return clusterSharding().startProxy("abcListenerShardRegion",Optional.of("abcService") , defShardignessageExtractor());
-    }
-
-/*
-    @Bean
-    public ActorRef abcListenerShardRegion() {
-//        return actorSystem().actorOf(springExtension.props("defToAbcEventSender").withRouter(new RoundRobinPool(1)), "defToAbcEventSender");
-        return clusterSharding().start("abcListenerSR", springExtension.props("abcEventListener"), initClusterShardingSettings(), defShardignessageExtractor());
-    }
-*/
-
-/*
-    @Bean
-    public ActorRef defToAbcSenderShardRegion() {
-        return clusterSharding().start("defToAbcEventSenderShardRegion", springExtension.props("defToAbcEventSender"), initClusterShardingSettings(), defShardignessageExtractor());
-    }
-*/
-
-
-    @Bean
     public ClusterShardingSettings initClusterShardingSettings(){
         return ClusterShardingSettings.create(actorSystem()).withRole("defService");
     }
@@ -128,6 +98,21 @@ public class AkkaConfig extends WebMvcConfigurerAdapter {
 
     }
 
+    @Bean
+    public ActorRef defToAbcEventSenderActor() {
+        return clusterSharding().start("defToAbcEventSender", springExtension.props("defToAbcEventSender"), initClusterShardingSettings(), defShardignessageExtractor());
+    }
+    @Bean
+    public ActorRef defToAbcDistEventSenderActor() {
+        return clusterSharding().start("defToAbcDistEventSender", springExtension.props("defToAbcDistEventSender"), initClusterShardingSettings(), defShardignessageExtractor());
+    }
+
+    @Bean
+    public ActorRef abcListenerShardRegionProxy() {
+        //starx proxy name has to match the exact shard region name of the target actor.
+        return clusterSharding().startProxy("abcListenerShardRegion",Optional.of("abcService") , defShardignessageExtractor());
+    }
+
 /*
     @Bean
     public ActorRef defEventStoreActorShardRegion() {
@@ -163,7 +148,7 @@ public class AkkaConfig extends WebMvcConfigurerAdapter {
                 int numberOfShards = 100;
                 if (message instanceof AssignmentEvent) {
                     String uid = ((AssignmentEvent) message).getModuleId().toString();
-                    String shardId=String.valueOf(uid.length() % numberOfShards);;
+                    String shardId=String.valueOf(uid.hashCode() % numberOfShards);;
                     System.out.println("ShardId --->" + shardId);
                     return shardId;
                 } else {
