@@ -11,9 +11,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class EventDispatcher {
     @Autowired
-    ActorRef abcToDefEventSenderActor;
+    ActorRef abcToDefEventSenderShardRegion;
 
     public void dispatchToDef(EDFEvent assignmentEvent) {
-        abcToDefEventSenderActor.tell(assignmentEvent, null);
+        abcToDefEventSenderShardRegion.tell(assignmentEvent, null);
     }
 }

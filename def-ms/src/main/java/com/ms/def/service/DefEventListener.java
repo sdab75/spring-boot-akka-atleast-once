@@ -5,15 +5,15 @@ import akka.cluster.client.ClusterClientReceptionist;
 import akka.cluster.pubsub.DistributedPubSub;
 import akka.cluster.pubsub.DistributedPubSubMediator;
 import akka.cluster.sharding.ShardRegion;
-import akka.pattern.CircuitBreaker;
 import akka.pattern.Patterns;
 import akka.util.Timeout;
-import com.ms.common.CircuitBreakerUtil;
 import com.ms.common.NonPersistentActor;
 import com.ms.common.SuperVisorStrategyUtil;
 import com.ms.event.AssignmentEvent;
 import com.ms.event.EDFEventDeliveryAck;
 import com.ms.event.IgnoreErroedEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
@@ -22,8 +22,6 @@ import scala.concurrent.duration.Duration;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Created by davenkat on 9/28/2015.
@@ -40,6 +38,11 @@ public class DefEventListener extends NonPersistentActor {
     @Autowired
     ActorRef defEventStoreSupervisorShardRegion;
 
+    @Autowired
+    ActorRef initdefEventStoreSupervisor;
+
+    private int responseTimeout = 100;
+
     @Override
     public void preStart() throws Exception {
         initSubscriber();
@@ -48,7 +51,8 @@ public class DefEventListener extends NonPersistentActor {
     }
 
     private void initSubscriber() {
-        System.out.println("Starting up");
+        System.out.println("AbcEventListener init..");
+        getContext().watch(initdefEventStoreSupervisor);
     }
 
     @Override
@@ -77,6 +81,13 @@ public class DefEventListener extends NonPersistentActor {
     public void postRestart(Throwable reason) throws Exception {
         System.out.println("Listener:  Post Restart called @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
         super.postRestart(reason);
+    }
+
+
+    @Override
+    protected String[] getShardingRegion() {
+        String[] regions={"defListenerShardRegion"};
+        return regions ;
     }
 
     @Override
@@ -120,20 +131,4 @@ public class DefEventListener extends NonPersistentActor {
         return "DefEventListener";
     }
 
-    private int maxFailures = 2;
-    private int responseTimeout = 100;
-    private int callFailureTimeout = 100;
-    private int resetTimeout = 20;
-
-    @Autowired
-    CircuitBreakerUtil circuitBreakerUtil;
-
-
-    @Override
-    protected CircuitBreaker getCircuitBreaker() {
-        return circuitBreakerUtil.getCircuitBreaker(actorName(), getContext().dispatcher(),
-                getContext().system().scheduler(), maxFailures,
-                Duration.create(responseTimeout, TimeUnit.MILLISECONDS),
-                Duration.create(resetTimeout, TimeUnit.SECONDS));
-    }
 }

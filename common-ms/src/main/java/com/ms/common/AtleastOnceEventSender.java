@@ -1,60 +1,72 @@
 package com.ms.common;
 
-import akka.actor.ActorPath;
 import akka.actor.ActorRef;
 import akka.actor.ActorSelection;
+import akka.cluster.ClusterEvent;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 import akka.japi.Function;
 import akka.japi.Procedure;
 import akka.persistence.UntypedPersistentActorWithAtLeastOnceDelivery;
+import com.ms.config.SpringExtension;
 import com.ms.event.EDFEvent;
 import com.ms.event.EDFEventDeliveryAck;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
 public abstract class AtleastOnceEventSender extends UntypedPersistentActorWithAtLeastOnceDelivery {
     private LoggingAdapter LOG = Logging.getLogger(getContext().system(), this);
 
-    ActorRef path=null;
+    @Autowired
+    private SpringExtension springExtension;
+    private ActorRef eventSenderCB;
 
-    public AtleastOnceEventSender(){
-        path=destinationActorPath();
-    }
-   // private ActorSelection destination;
 
     @Override
     public void preStart() throws Exception {
-    //    destination = getContext().actorSelection(path.path());
+        //getContext().watch(getEventSupervisorActorRef());
+        initActor();
+        ClusterMemberManagementUtil.watchShardRegion(getContext(), getSelf(),actorName(), getShardingRegion());
+        super.preStart();
     }
+
+    protected void initActor() {
+        eventSenderCB = getContext().watch(getContext().actorOf(springExtension.props(getEventSenderCB()), getEventSenderCB()));
+    }
+
+    abstract protected String[] getShardingRegion();
 
     @Override
     public void onReceiveCommand(Object message) {
-
+        if (message instanceof ClusterEvent.MemberRemoved) {
+            System.out.println(actorName() + " cleaning Sharding Coordinators ======>" + message.toString());
+            ClusterMemberManagementUtil.cleanShardingCoordinators(message, getContext(), getSelf(),actorName(), getShardingRegion());
+        } else
         /* Step1: The event sender receives a regular message.
          Using the message create MsgSent object and store that in the db.*/
-        if (message instanceof EDFEvent) {
-            EDFEvent edfEvent = (EDFEvent) message;
+            if (message instanceof EDFEvent) {
+                EDFEvent edfEvent = (EDFEvent) message;
             /* Step2: The following persist command saves the MsgSent object
             and further hands over that object to updateState operation.*/
-            persist(edfEvent, new Procedure<EDFEvent>() {
-                public void apply(EDFEvent evt) {
-                    updateState(evt);
-                }
-            });
-        } else if (message instanceof EDFEventDeliveryAck) {
-            log("Received confirmation ===>" + message.toString());
+                persist(edfEvent, new Procedure<EDFEvent>() {
+                    public void apply(EDFEvent evt) {
+                        updateState(evt);
+                    }
+                });
+            } else if (message instanceof EDFEventDeliveryAck) {
+                log("Received confirmation ===>" + message.toString());
             /*Step4: The destination (MyDestination) sends a Confirm object to the sender (EventSender). */
-            EDFEventDeliveryAck confirm = (EDFEventDeliveryAck) message;
-            persist(confirm, new Procedure<EDFEventDeliveryAck>() {
-                public void apply(EDFEventDeliveryAck evt) {
-                    updateState(evt);
-                }
-            });
-        } else {
-            log("Received unhandled object ===>" + message.toString());
-            unhandled(message);
-        }
+                EDFEventDeliveryAck confirm = (EDFEventDeliveryAck) message;
+                persist(confirm, new Procedure<EDFEventDeliveryAck>() {
+                    public void apply(EDFEventDeliveryAck evt) {
+                        updateState(evt);
+                    }
+                });
+            } else {
+                log("Received unhandled object ===>" + message.toString());
+                unhandled(message);
+            }
     }
 
     @Override
@@ -66,12 +78,12 @@ public abstract class AtleastOnceEventSender extends UntypedPersistentActorWithA
 
     void updateState(Object event) {
         if (event instanceof EDFEvent) {
-            log("Sending message to ===>" +destinationActorPath()+", with event data ===> "+ event.toString());
+            log("Sending message to ===>" + eventSenderCB.path() + ", with event data ===> " + event.toString());
             /*Step3: Using MsgSent this operation creates the destination object (Msg)
             and asynchronously delivers Msg to the destination.
              The confirmation will be sent by the destination and this operation is not waiting for the confirmation.*/
             final EDFEvent evt = (EDFEvent) event;
-            deliver(getContext().actorSelection(path.path()), new Function<Long, Object>() {
+            deliver(eventSenderCB.path(), new Function<Long, Object>() {
                 public Object apply(Long deliveryId) {
                     //set Delivery Id sequence generated by Akka which will be used for later ack deliveryId.
                     evt.setEventDeliveryId(deliveryId);
@@ -80,16 +92,16 @@ public abstract class AtleastOnceEventSender extends UntypedPersistentActorWithA
             });
         } else if (event instanceof EDFEventDeliveryAck) {
             final EDFEventDeliveryAck ack = (EDFEventDeliveryAck) event;
-            log("Received confirmation from "+getSender() +"with delivery Id==>" + ack.getEventDeliveryId());
+            log("Received confirmation from " + getSender() + "with delivery Id==>" + ack.getEventDeliveryId());
             confirmDelivery(ack.getEventDeliveryId());
         }
     }
 
-    protected void log(String msg){
+    protected void log(String msg) {
         LOG.info(actorName() + " : " + msg);
     }
 
-    protected abstract ActorRef destinationActorPath();
+    protected abstract String getEventSenderCB();
 
     protected abstract String actorName();
 

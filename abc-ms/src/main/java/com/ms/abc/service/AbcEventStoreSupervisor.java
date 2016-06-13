@@ -40,6 +40,12 @@ public class AbcEventStoreSupervisor extends NonPersistentActor {
         initActor();
         super.preStart();
     }
+    @Override
+    protected String[] getShardingRegion() {
+        String[] regions={"abcEventStoreSupervisor"};
+        return regions ;
+    }
+
 
     private void initActor() {
         log.info("AbcEvent Store Supervisor Starting up");

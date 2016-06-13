@@ -50,6 +50,11 @@ public class DefEventStoreSupervisor extends NonPersistentActor {
         log("supervision strategy kicked off");
         return SuperVisorStrategyUtil.persistentActorSupervisorStrategy(actorName(), getSender(), getSelf());
     }
+    @Override
+    protected String[] getShardingRegion() {
+        String[] regions={"defEventStoreSupervisor"};
+        return regions ;
+    }
 
 
     static final Object Reconnect = "Reconnect";

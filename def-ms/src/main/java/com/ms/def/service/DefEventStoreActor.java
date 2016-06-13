@@ -42,6 +42,11 @@ public class DefEventStoreActor extends PersistentActor {
     }
 
     @Override
+    protected String[] getShardingRegion() {
+        return null ;
+    }
+
+    @Override
     protected void processEvent(EDFEvent edfEvent) {
         System.out.println("Successfully processed event");
     }

@@ -2,11 +2,12 @@ package com.ms.common;
 
 import akka.actor.PoisonPill;
 import akka.actor.ReceiveTimeout;
+import akka.cluster.Cluster;
+import akka.cluster.ClusterEvent;
 import akka.cluster.pubsub.DistributedPubSubMediator;
 import akka.cluster.sharding.ShardRegion;
 import akka.japi.Procedure;
 import akka.persistence.UntypedPersistentActor;
-import com.ms.abc.service.AsyncWrapperException;
 import com.ms.event.EDFEvent;
 import com.ms.event.EDFEventDeliveryAck;
 import com.ms.event.IgnoreErroedEvent;
@@ -19,10 +20,18 @@ import org.springframework.stereotype.Component;
 public abstract class PersistentActor extends UntypedPersistentActor {
     private static final Logger LOG = LoggerFactory.getLogger(PersistentActor.class);
 
+    Cluster cluster = Cluster.get(getContext().system());
 
+    //subscribe to cluster changes
     @Override
     public void preStart() throws Exception {
         LOG.info(actorName() + " Starting ......");
+        //#subscribe
+        cluster.subscribe(getSelf(), ClusterEvent.initialStateAsEvents(),
+                ClusterEvent.MemberEvent.class, ClusterEvent.UnreachableMember.class, ClusterEvent.MemberUp.class, ClusterEvent.MemberRemoved.class);
+        ClusterMemberManagementUtil.watchShardRegion(getContext(), getSelf(),actorName(), getShardingRegion());
+
+        //#subscribe
         super.preStart();
     }
 
@@ -56,21 +65,21 @@ public abstract class PersistentActor extends UntypedPersistentActor {
     }
 
     @Override
-    public void onReceiveCommand(Object cmd) {
-        try {
-            processCommand(cmd);
-        } finally {
-        }
-
+    public void onReceiveCommand(Object message) {
+        processCommand(message);
     }
 
+    abstract protected String[] getShardingRegion();
     /**
      * Common orchestration for a persistent actor.
      *
      * @param cmd
      */
     protected void processCommand(Object cmd) {
-        if (cmd instanceof IgnoreErroedEvent) {
+        if (cmd instanceof ClusterEvent.MemberRemoved) {
+            System.out.println(actorName()+ " cleaning Sharding Coordinators ======>" + cmd.toString());
+            ClusterMemberManagementUtil.cleanShardingCoordinators(cmd,getContext(),getSelf(),actorName(),getShardingRegion());
+        } else if (cmd instanceof IgnoreErroedEvent) {
             log(" Persistent actor received IgnoreErroedEvent from the supervisor...");
             //This is a persisted event and failed for some reason. The supervisor determines received error can't be processed further and can't retry anymore.
             //To achieve this

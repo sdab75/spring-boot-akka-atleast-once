@@ -2,14 +2,16 @@ package com.ms.config;
 
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
+import akka.actor.Address;
 import akka.actor.Props;
+import akka.cluster.Cluster;
 import akka.cluster.sharding.ClusterSharding;
 import akka.cluster.sharding.ClusterShardingSettings;
 import akka.cluster.sharding.ShardRegion;
-import akka.routing.RoundRobinPool;
 import com.ms.event.AssignmentEvent;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
+import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +20,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 @Configuration
 //@Lazy
@@ -29,51 +35,21 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter
 public class AkkaConfig extends WebMvcConfigurerAdapter {
     private static final Logger LOG = LoggerFactory.getLogger(AkkaConfig.class);
 
-
     @Autowired
     private SpringExtension springExtension;
 
     @Autowired
     private ApplicationContext applicationContext;
 
-    /**
-     * Actor system singleton for this application.
-     */
-    @Bean
-    public ActorSystem actorSystem() {
-        ActorSystem actorSystem = ActorSystem.create("ClusterSystem", akkaConfiguration());
-        springExtension.initialize(applicationContext);
-        return actorSystem;
-    }
+    @Autowired
+    private ActorSystem actorSystem;
 
-    @Bean
-    public ActorRef abcToDefEventSenderActor() {
-        return actorSystem().actorOf(springExtension.props("abcToDefEventSender").withRouter(new RoundRobinPool(1)), "abcToDefEventSender");
-    }
-
-    @Bean
-    public ActorRef abcToDefDistEventSenderActor() {
-        return actorSystem().actorOf(springExtension.props("abcToDefDistEventSender").withRouter(new RoundRobinPool(1)), "abcToDefDistEventSender");
-    }
-
-
+    @Autowired
+    private ClusterSharding clusterSharding;
     @Bean
     public ClusterShardingSettings initClusterShardingSettings(){
-        return ClusterShardingSettings.create(actorSystem()).withRole("abcService");
+        return ClusterShardingSettings.create(actorSystem).withRole("abcService");
     }
-
-    @Bean
-    public ActorRef deadLetterInit() {
-        ActorRef actor=actorSystem().actorOf(springExtension.props("deadLetterActor"), "deadLetterActor");
-        return actor;
-    }
-
-    @Bean
-    public ClusterSharding clusterSharding(){
-        return  ClusterSharding.get(actorSystem());
-    }
-
-
 
     @Bean
     public Props abcEventStoreSupervisorProps(){
@@ -98,33 +74,46 @@ public class AkkaConfig extends WebMvcConfigurerAdapter {
 
     @Bean
     public ActorRef initAbcEventStoreSupervisor() {
-        ActorRef sub = actorSystem().actorOf(abcEventStoreSupervisorProps(), "abcEventStoreSupervisor");
+        ActorRef sub = actorSystem.actorOf(abcEventStoreSupervisorProps(), "abcEventStoreSupervisor");
         return sub;
 
     }
 
     @Bean
     public ActorRef initAbcEventListener() {
-        ActorRef sub = actorSystem().actorOf(abcEventListenerProps(), "abcEventListener");
+        ActorRef sub = actorSystem.actorOf(abcEventListenerProps(), "abcEventListener");
         return sub;
 
     }
 
-/*    @Bean
-    public ActorRef abcEventStoreActorShardRegion() {
-        return clusterSharding().start("abcEventStoreActor", abcEventStoreActorProps(), initClusterShardingSettings(), abcShardignessageExtractor());
-    }*/
+    /*
+    Shard Region Definitions
+     */
+
+    @Bean
+    public ActorRef abcToDefEventSenderShardRegion() {
+        return clusterSharding.start("abcToDefEventSenderShardRegion", springExtension.props("abcToDefEventSender"), initClusterShardingSettings(), abcShardignessageExtractor());
+    }
+
+    @Bean
+    public ActorRef defListenerShardRegionProxy() {
+        //starx proxy name has to match the exact shard region name of the target actor.
+        return clusterSharding.startProxy("defListenerShardRegion",Optional.of("defService") , abcShardignessageExtractor());
+    }
 
 
     @Bean
     public ActorRef abcEventStoreSupervisorShardRegion() {
-        return clusterSharding().start("abcEventStoreSupervisor", abcEventStoreSupervisorProps(), initClusterShardingSettings(), abcShardignessageExtractor());
+        return clusterSharding.start("abcEventStoreSupervisor", abcEventStoreSupervisorProps(), initClusterShardingSettings(), abcShardignessageExtractor());
     }
 
     @Bean
-    public ActorRef abcListenerShardRegionInit() {
-        return clusterSharding().start("abcListenerShardRegion", springExtension.props("abcEventListener"), initClusterShardingSettings(), abcShardignessageExtractor());
+    public ActorRef abcListenerShardRegion() {
+        return clusterSharding.start("abcListenerShardRegion", springExtension.props("abcEventListener"), initClusterShardingSettings(), abcShardignessageExtractor());
     }
+
+
+
 
     @Bean
     @Scope(value = "prototype")
@@ -160,13 +149,4 @@ public class AkkaConfig extends WebMvcConfigurerAdapter {
         };
         return messageExtractor;
     }
-
-    /**
-     * Read configuration from application.conf file
-     */
-    @Bean
-    public Config akkaConfiguration() {
-        return ConfigFactory.load();
-    }
-
 }

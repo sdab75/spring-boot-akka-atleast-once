@@ -19,12 +19,16 @@ public class DefToAbcEventSender extends AtleastOnceEventSender {
         return "DefToAbcEventSender-" + getContext().parent().path().name();
     }
 
-
     @Override
-    protected ActorRef destinationActorPath() {
-        return ClusterSharding.get(getContext().system()).shardRegion("defToAbcDistEventSender");
+    protected String[] getShardingRegion() {
+        String[] regions={"defToAbcDistEventSender"};
+        return regions ;
     }
 
+    @Override
+    protected String getEventSenderCB() {
+        return "defToAbcAtleastOnceEventSenderCB";
+    }
 
     @Override
     protected String actorName() {

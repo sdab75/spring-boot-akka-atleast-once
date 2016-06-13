@@ -6,10 +6,7 @@ import akka.actor.Props;
 import akka.cluster.sharding.ClusterSharding;
 import akka.cluster.sharding.ClusterShardingSettings;
 import akka.cluster.sharding.ShardRegion;
-import akka.routing.RoundRobinPool;
 import com.ms.event.AssignmentEvent;
-import com.typesafe.config.Config;
-import com.typesafe.config.ConfigFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,31 +35,23 @@ public class AkkaConfig extends WebMvcConfigurerAdapter {
     @Autowired
     private ApplicationContext applicationContext;
 
-    /**
-     * Actor system singleton for this application.
-     */
-    @Bean
-    public ActorSystem actorSystem() {
-        ActorSystem actorSystem = ActorSystem.create("ClusterSystem", akkaConfiguration());
-        springExtension.initialize(applicationContext);
-        return actorSystem;
-    }
+    @Autowired
+    private ActorSystem actorSystem;
+
+    @Autowired
+    private ClusterSharding clusterSharding;
+
 
     @Bean
     public ClusterShardingSettings initClusterShardingSettings(){
-        return ClusterShardingSettings.create(actorSystem()).withRole("defService");
+        return ClusterShardingSettings.create(actorSystem).withRole("defService");
     }
 
     @Bean
     public ClusterShardingSettings initAbcClusterShardingSettings(){
-        return ClusterShardingSettings.create(actorSystem()).withRole("abcService");
+        return ClusterShardingSettings.create(actorSystem).withRole("abcService");
     }
-
-    @Bean
-    public ClusterSharding clusterSharding(){
-        return  ClusterSharding.get(actorSystem());
-    }
-
+    
     @Bean
     public Props defEventStoreSupervisorProps(){
         return springExtension.props("defEventStoreSupervisor");
@@ -86,44 +75,48 @@ public class AkkaConfig extends WebMvcConfigurerAdapter {
 
     @Bean
     public ActorRef initdefEventStoreSupervisor() {
-        ActorRef sub = actorSystem().actorOf(defEventStoreSupervisorProps(), "defEventStoreSupervisor");
+        ActorRef sub = actorSystem.actorOf(defEventStoreSupervisorProps(), "defEventStoreSupervisor");
         return sub;
 
     }
 
     @Bean
     public ActorRef initdefEventListener() {
-        ActorRef sub = actorSystem().actorOf(defEventListenerProps(), "defEventListener");
+        ActorRef sub = actorSystem.actorOf(defEventListenerProps(), "defEventListener");
         return sub;
 
     }
 
     @Bean
     public ActorRef defToAbcEventSenderActor() {
-        return clusterSharding().start("defToAbcEventSender", springExtension.props("defToAbcEventSender"), initClusterShardingSettings(), defShardignessageExtractor());
+        return clusterSharding.start("defToAbcEventSender", springExtension.props("defToAbcEventSender"), initClusterShardingSettings(), defShardignessageExtractor());
     }
     @Bean
     public ActorRef defToAbcDistEventSenderActor() {
-        return clusterSharding().start("defToAbcDistEventSender", springExtension.props("defToAbcDistEventSender"), initClusterShardingSettings(), defShardignessageExtractor());
+        return clusterSharding.start("defToAbcDistEventSender", springExtension.props("defToAbcDistEventSender"), initClusterShardingSettings(), defShardignessageExtractor());
+    }
+
+    @Bean
+    public ActorRef defToAbcEventSenderShardRegion() {
+        return clusterSharding.start("defToAbcEventSenderShardRegion", springExtension.props("defToAbcEventSender"), initClusterShardingSettings(), defShardignessageExtractor());
+    }
+
+    @Bean
+    public ActorRef defListenerShardRegion() {
+        return clusterSharding.start("defListenerShardRegion", defEventListenerProps(), initClusterShardingSettings(), defShardignessageExtractor());
     }
 
     @Bean
     public ActorRef abcListenerShardRegionProxy() {
         //starx proxy name has to match the exact shard region name of the target actor.
-        return clusterSharding().startProxy("abcListenerShardRegion",Optional.of("abcService") , defShardignessageExtractor());
+        return clusterSharding.startProxy("abcListenerShardRegion",Optional.of("abcService") , defShardignessageExtractor());
     }
-
-/*
-    @Bean
-    public ActorRef defEventStoreActorShardRegion() {
-        return clusterSharding().start("defEventStoreActor", defEventStoreActorProps(), initClusterShardingSettings(), defShardignessageExtractor());
-    }
-*/
 
     @Bean
     public ActorRef defEventStoreSupervisorShardRegion() {
-        return clusterSharding().start("defEventStoreSupervisor", defEventStoreSupervisorProps(), initClusterShardingSettings(), defShardignessageExtractor());
+        return clusterSharding.start("defEventStoreSupervisor", defEventStoreSupervisorProps(), initClusterShardingSettings(), defShardignessageExtractor());
     }
+
 
 
     @Bean
@@ -160,13 +153,4 @@ public class AkkaConfig extends WebMvcConfigurerAdapter {
         };
         return messageExtractor;
     }
-
-    /**
-     * Read configuration from application.conf file
-     */
-    @Bean
-    public Config akkaConfiguration() {
-        return ConfigFactory.load();
-    }
-
 }

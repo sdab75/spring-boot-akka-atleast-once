@@ -29,6 +29,12 @@ public class AbcEventStoreActor extends PersistentActor {
     }
 
     @Override
+    protected String[] getShardingRegion() {
+        return null ;
+    }
+
+
+    @Override
     protected String actorName() {
         return "AbcEventStoreActor";
     }

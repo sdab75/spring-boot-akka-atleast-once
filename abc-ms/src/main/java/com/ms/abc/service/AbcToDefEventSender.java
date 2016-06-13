@@ -14,8 +14,15 @@ public class AbcToDefEventSender extends AtleastOnceEventSender {
     public String persistenceId() { return "AbcToDefEventSender"; }
 
     @Override
-    protected String destinationActorPath() {
-        return "/user/abcToDefDistEventSender";
+    protected String[] getShardingRegion() {
+        String[] regions={"abcToDefEventSenderShardRegion"};
+        return regions ;
+    }
+
+
+    @Override
+    protected String getEventSenderCB() {
+        return "abcToDefAtleastOnceEventSenderCB";
     }
 
     @Override
