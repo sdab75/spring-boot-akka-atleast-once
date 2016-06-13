@@ -11,6 +11,7 @@ import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,7 +23,8 @@ import java.util.List;
 @Configuration
 public class AkkaCommonConfig extends WebMvcConfigurerAdapter {
     private static final Logger LOG = LoggerFactory.getLogger(AkkaCommonConfig.class);
-    String nodes="127.0.0.1:2550,127.0.0.1:2551,127.0.0.1:2552";
+    private @Value(value = "${akka.cluster.member-nodes}") String nodes;
+//    String nodes="127.0.0.1:2550,127.0.0.1:2551,127.0.0.1:2552";
 
     @Autowired
     private SpringExtension springExtension;
